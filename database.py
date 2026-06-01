@@ -9,7 +9,9 @@ DEFAULT_DB = {
     "posts": {}, # post_id: {message_id: int, chat_id: int}
     "clones": [], # list of tokens
     "users": [], # list of user_ids who started the bot
-    "channels": {} # chat_id: {link: str, owner: int}
+    "channels": {}, # chat_id: {link: str, owner: int}
+    "force_channels": [], # list of {chat_id: int/str, link: str, type: str}
+    "delete_timer": 8
 }
 
 db_lock = asyncio.Lock()
@@ -72,3 +74,33 @@ async def add_channel(chat_id, link, owner_id):
 async def get_channel(chat_id):
     db = await load_db()
     return db["channels"].get(str(chat_id))
+
+async def add_admin(user_id):
+    db = await load_db()
+    if user_id not in db["admins"]:
+        db["admins"].append(user_id)
+        await save_db(db)
+
+async def remove_admin(user_id):
+    db = await load_db()
+    if user_id in db["admins"]:
+        db["admins"].remove(user_id)
+        await save_db(db)
+
+async def set_delete_timer(seconds):
+    db = await load_db()
+    db["delete_timer"] = seconds
+    await save_db(db)
+
+async def get_delete_timer():
+    db = await load_db()
+    return db.get("delete_timer", 8)
+
+async def set_force_channels(channels):
+    db = await load_db()
+    db["force_channels"] = channels
+    await save_db(db)
+
+async def get_force_channels():
+    db = await load_db()
+    return db.get("force_channels", [])

@@ -14,9 +14,12 @@ SMALL_CAPS_MAP = {
 def to_small_caps(text):
     return "".join(SMALL_CAPS_MAP.get(c, c) for c in text)
 
-async def delete_after(message, seconds):
+async def delete_after(messages, seconds):
+    if not isinstance(messages, list):
+        messages = [messages]
     await asyncio.sleep(seconds)
-    try:
-        await message.delete()
-    except Exception:
-        pass
+    for message in messages:
+        try:
+            await message.delete()
+        except Exception:
+            pass
