@@ -11,7 +11,8 @@ DEFAULT_DB = {
     "users": [], # list of user_ids who started the bot
     "channels": {}, # chat_id: {link: str, owner: int}
     "force_channels": [], # list of {chat_id: int/str, link: str, type: str}
-    "delete_timer": 8
+    "delete_timer": 8,
+    "random_links": {} # random_id: chat_id
 }
 
 db_lock = asyncio.Lock()
@@ -104,3 +105,18 @@ async def set_force_channels(channels):
 async def get_force_channels():
     db = await load_db()
     return db.get("force_channels", [])
+
+async def add_random_link(random_id, chat_id):
+    db = await load_db()
+    db["random_links"][random_id] = chat_id
+    await save_db(db)
+
+async def get_random_link_chat_id(random_id):
+    db = await load_db()
+    return db.get("random_links", {}).get(random_id)
+
+async def remove_random_link(random_id):
+    db = await load_db()
+    if random_id in db.get("random_links", {}):
+        del db["random_links"][random_id]
+        await save_db(db)
