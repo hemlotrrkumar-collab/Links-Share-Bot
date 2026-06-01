@@ -29,6 +29,21 @@ async def is_subscribed(client, user_id):
             not_subscribed.append(ch)
     return not_subscribed
 
+async def safe_delete(messages, seconds):
+    if not isinstance(messages, list):
+        messages = [messages]
+    to_delete = []
+    for msg in messages:
+        if not msg: continue
+        try:
+            user_id = msg.chat.id
+            if not await is_admin(user_id):
+                to_delete.append(msg)
+        except Exception:
+            pass
+    if to_delete:
+        await delete_after(to_delete, seconds)
+
 async def help_command(client, message: Message):
     user_id = message.from_user.id
     if not await is_authorized(user_id):
@@ -51,7 +66,7 @@ async def help_command(client, message: Message):
     )
     timer = await get_delete_timer()
     msg = await message.reply(help_text)
-    asyncio.create_task(delete_after([message, msg], timer))
+    asyncio.create_task(safe_delete([message, msg], timer))
 
 async def start_handler(client, message: Message):
     user_id = message.from_user.id
@@ -59,6 +74,16 @@ async def start_handler(client, message: Message):
     timer = await get_delete_timer()
 
     await add_user(user_id) # Add user to DB for broadcast
+
+    if not await is_admin(user_id):
+        try:
+            message_ids = []
+            async for m in client.get_chat_history(message.chat.id):
+                message_ids.append(m.id)
+            if message_ids:
+                await client.delete_messages(message.chat.id, message_ids)
+        except Exception:
+            pass
 
     if len(text) > 1:
         data = text[1]
@@ -75,7 +100,7 @@ async def start_handler(client, message: Message):
                 to_small_caps("ʏᴏᴜ ᴍᴜsᴛ ᴊᴏɪɴ ᴏᴜʀ ᴄʜᴀɴɴᴇʟs ᴛᴏ ᴜsᴇ ᴛʜɪs ʙᴏᴛ."),
                 reply_markup=InlineKeyboardMarkup(buttons)
             )
-            asyncio.create_task(delete_after([message, msg], timer))
+            asyncio.create_task(safe_delete([message, msg], timer))
             return
 
         post_data = await get_post(data)
@@ -88,17 +113,17 @@ async def start_handler(client, message: Message):
                     protect_content=True
                 )
                 info_msg = await message.reply(to_small_caps(f"ᴛʜɪs ᴍᴇssᴀɢᴇ ᴡɪʟʟ ʙᴇ ᴅᴇʟᴇᴛᴇᴅ ɪɴ {timer} sᴇᴄᴏɴᴅs."))
-                asyncio.create_task(delete_after([message, msg, info_msg], timer))
+                asyncio.create_task(safe_delete([message, msg, info_msg], timer))
             except Exception as e:
                 msg = await message.reply(to_small_caps(f"ᴇʀʀᴏʀ: {str(e)}"))
-                asyncio.create_task(delete_after([message, msg], timer))
+                asyncio.create_task(safe_delete([message, msg], timer))
             return
         elif data.startswith("ch_"):
             chat_id = data.replace("ch_", "").replace("n", "-")
             channel_info = await get_channel(chat_id)
             if channel_info:
                 msg = await message.reply(f"{to_small_caps('ʜᴇʀᴇ ɪs ʏᴏᴜʀ ᴄʜᴀɴɴᴇʟ ʟɪɴᴋ:')} {channel_info['link']}")
-                asyncio.create_task(delete_after([message, msg], timer))
+                asyncio.create_task(safe_delete([message, msg], timer))
                 return
         elif data.startswith("rd_"):
             random_id = data.replace("rd_", "")
@@ -107,12 +132,12 @@ async def start_handler(client, message: Message):
                 channel_info = await get_channel(chat_id)
                 if channel_info:
                     msg = await message.reply(f"{to_small_caps('ʜᴇʀᴇ ɪs ʏᴏᴜʀ ᴄʜᴀɴɴᴇʟ ʟɪɴᴋ:')} {channel_info['link']}")
-                    asyncio.create_task(delete_after([message, msg], timer))
+                    asyncio.create_task(safe_delete([message, msg], timer))
                     return
 
     if not await is_authorized(user_id):
         msg = await message.reply(to_small_caps("ɴᴏᴛ ᴀᴜᴛʜᴏʀɪᴢᴇᴅ."))
-        asyncio.create_task(delete_after([message, msg], timer))
+        asyncio.create_task(safe_delete([message, msg], timer))
         return
 
     welcome_text = to_small_caps("ᴡᴇʟᴄᴏᴍᴇ ᴛᴏ ᴛʜᴇ ʟɪɴᴋ sʜᴀʀᴇ ʙᴏᴛ.\n\nᴜsᴇ ᴛʜᴇ ʙᴜᴛᴛᴏɴs ʙᴇʟᴏᴡ ᴛᴏ ᴍᴀɴᴀɢᴇ.")
@@ -122,7 +147,7 @@ async def start_handler(client, message: Message):
         [InlineKeyboardButton(to_small_caps("ᴄʟᴏɴᴇ ʙᴏᴛ"), callback_data="clone_ui")]
     ]
     msg = await message.reply(welcome_text, reply_markup=InlineKeyboardMarkup(buttons))
-    asyncio.create_task(delete_after([message, msg], timer))
+    asyncio.create_task(safe_delete([message, msg], timer))
 
 async def callback_handler(client, callback_query: CallbackQuery):
     data = callback_query.data
@@ -135,13 +160,13 @@ async def callback_handler(client, callback_query: CallbackQuery):
     timer = await get_delete_timer()
     if data == "create_post":
         msg = await callback_query.message.reply(to_small_caps("ᴜsᴇ /ᴘᴏsᴛ ᴛᴏ ᴄʀᴇᴀᴛᴇ ᴀ sʜᴀʀᴇᴀʙʟᴇ ʟɪɴᴋ."))
-        asyncio.create_task(delete_after(msg, timer))
+        asyncio.create_task(safe_delete(msg, timer))
     elif data == "broadcast_ui":
         msg = await callback_query.message.reply(to_small_caps("ʀᴇᴘʟʏ ᴛᴏ ᴀ ᴍᴇssᴀɢᴇ ᴡɪᴛʜ /ʙʀᴏᴀᴅᴄᴀsᴛ ᴛᴏ sᴇɴᴅ ɪᴛ."))
-        asyncio.create_task(delete_after(msg, timer))
+        asyncio.create_task(safe_delete(msg, timer))
     elif data == "clone_ui":
         msg = await callback_query.message.reply(to_small_caps("ᴜsᴇ /ᴄʟᴏɴᴇ [ʙᴏᴛ_ᴛᴏᴋᴇɴ] ᴛᴏ ᴄʟᴏɴᴇ."))
-        asyncio.create_task(delete_after(msg, timer))
+        asyncio.create_task(safe_delete(msg, timer))
     elif data == "fs_list":
         channels = await get_force_channels()
         text = to_small_caps("ꜰᴏʀᴄᴇ sᴜʙ ᴄʜᴀɴɴᴇʟs:\n\n")
@@ -154,11 +179,11 @@ async def callback_handler(client, callback_query: CallbackQuery):
             buttons.append([InlineKeyboardButton(to_small_caps("ᴀᴅᴅ ᴄʜᴀɴɴᴇʟ"), callback_data="fs_add")])
 
         msg = await callback_query.message.edit_text(text, reply_markup=InlineKeyboardMarkup(buttons))
-        asyncio.create_task(delete_after(msg, timer))
+        asyncio.create_task(safe_delete(msg, timer))
     elif data == "fs_add":
         fs_setup_state[user_id] = {"step": "chat_id", "data": {}}
         msg = await callback_query.message.edit_text(to_small_caps("sᴇɴᴅ ᴛʜᴇ ᴄʜᴀᴛ ɪᴅ ᴏʀ ᴜsᴇʀɴᴀᴍᴇ ᴏꜰ ᴛʜᴇ ᴄʜᴀɴɴᴇʟ:"))
-        asyncio.create_task(delete_after(msg, timer))
+        asyncio.create_task(safe_delete(msg, timer))
     elif data.startswith("fs_del_"):
         index = int(data.split("_")[2])
         channels = await get_force_channels()
@@ -175,7 +200,7 @@ async def callback_handler(client, callback_query: CallbackQuery):
             fs_setup_state[user_id]["data"]["type"] = f_type
             fs_setup_state[user_id]["step"] = "link"
             msg = await callback_query.message.edit_text(to_small_caps("sᴇɴᴅ ᴛʜᴇ ɪɴᴠɪᴛᴇ ʟɪɴᴋ ꜰᴏʀ ᴛʜᴇ ᴄʜᴀɴɴᴇʟ:"))
-            asyncio.create_task(delete_after(msg, timer))
+            asyncio.create_task(safe_delete(msg, timer))
     await callback_query.answer()
 
 async def post_command(client, message: Message):
@@ -183,7 +208,7 @@ async def post_command(client, message: Message):
         return
     timer = await get_delete_timer()
     msg = await message.reply(to_small_caps("ꜰᴏʀᴡᴀʀᴅ ᴛʜᴇ ᴍᴇssᴀɢᴇ ʏᴏᴜ ᴡᴀɴᴛ ᴛᴏ ᴄʀᴇᴀᴛᴇ ᴀ ʟɪɴᴋ ꜰᴏʀ."))
-    asyncio.create_task(delete_after([message, msg], timer))
+    asyncio.create_task(safe_delete([message, msg], timer))
 
 async def handle_messages(client, message: Message):
     user_id = message.from_user.id
@@ -200,7 +225,7 @@ async def handle_messages(client, message: Message):
                 [InlineKeyboardButton(to_small_caps("ʀᴇǫᴜᴇsᴛᴇᴅ"), callback_data="fs_type_requested")]
             ]
             msg = await message.reply(to_small_caps("sᴇʟᴇᴄᴛ ʟɪɴᴋ ᴛʏᴘᴇ:"), reply_markup=InlineKeyboardMarkup(buttons))
-            asyncio.create_task(delete_after([message, msg], timer))
+            asyncio.create_task(safe_delete([message, msg], timer))
             return
         elif state["step"] == "link":
             state["data"]["link"] = message.text
@@ -209,18 +234,18 @@ async def handle_messages(client, message: Message):
             await set_force_channels(channels)
             del fs_setup_state[user_id]
             msg = await message.reply(to_small_caps("ꜰᴏʀᴄᴇ sᴜʙ ᴄʜᴀɴɴᴇʟ ᴀᴅᴅᴇᴅ sᴜᴄᴄᴇssꜰᴜʟʟʏ."))
-            asyncio.create_task(delete_after([message, msg], timer))
+            asyncio.create_task(safe_delete([message, msg], timer))
             return
 
     if not await is_authorized(user_id):
-        asyncio.create_task(delete_after(message, timer))
+        asyncio.create_task(safe_delete(message, timer))
         return
     post_id = str(uuid.uuid4())[:8]
     await add_post(post_id, message.chat.id, message.id)
     bot_username = (await client.get_me()).username
     link = f"https://t.me/{bot_username}?start={post_id}"
     msg = await message.reply(f"{to_small_caps('ʜᴇʀᴇ ɪs ʏᴏᴜʀ sʜᴀʀᴇᴀʙʟᴇ ʟɪɴᴋ:')}\n\n`{link}`", parse_mode=enums.ParseMode.MARKDOWN)
-    asyncio.create_task(delete_after([message, msg], timer))
+    asyncio.create_task(safe_delete([message, msg], timer))
 
 async def clone_command(client, message: Message):
     if not await is_admin(message.from_user.id): # Cloning strictly admin
@@ -229,7 +254,7 @@ async def clone_command(client, message: Message):
     text = message.text.split()
     if len(text) < 2:
         msg = await message.reply(to_small_caps("ᴜsᴀɢᴇ: /ᴄʟᴏɴᴇ [ʙᴏᴛ_ᴛᴏᴋᴇɴ]"))
-        asyncio.create_task(delete_after([message, msg], timer))
+        asyncio.create_task(safe_delete([message, msg], timer))
         return
     token = text[1]
     await add_clone(token)
@@ -239,19 +264,29 @@ async def clone_command(client, message: Message):
         msg = await message.reply(to_small_caps("ʙᴏᴛ ᴄʟᴏɴᴇᴅ sᴜᴄᴄᴇssꜰᴜʟʟʏ ᴀɴᴅ sᴛᴀʀᴛᴇᴅ."))
     except Exception as e:
         msg = await message.reply(to_small_caps(f"ꜰᴀɪʟᴇᴅ ᴛᴏ ᴄʟᴏɴᴇ ʙᴏᴛ: {str(e)}"))
-    asyncio.create_task(delete_after([message, msg], timer))
+    asyncio.create_task(safe_delete([message, msg], timer))
 
 async def broadcast_command(client, message: Message):
     if not await is_authorized(message.from_user.id):
         return
-    timer = await get_delete_timer()
+
+    text = message.text.split()
+    default_timer = await get_delete_timer()
+    broadcast_timer = default_timer
+
+    if len(text) > 1:
+        try:
+            broadcast_timer = int(text[1])
+        except ValueError:
+            pass
+
     if not message.reply_to_message:
         msg = await message.reply(to_small_caps("ʀᴇᴘʟʏ ᴛᴏ ᴀ ᴍᴇssᴀɢᴇ ᴛᴏ ʙʀᴏᴀᴅᴄᴀsᴛ ɪᴛ."))
-        asyncio.create_task(delete_after([message, msg], timer))
+        asyncio.create_task(safe_delete([message, msg], default_timer))
         return
+
     db = await load_db()
     users = db.get("users", [])
-    timer = await get_delete_timer()
     count = 0
     status_msg = await message.reply(to_small_caps("ʙʀᴏᴀᴅᴄᴀsᴛ sᴛᴀʀᴛᴇᴅ..."))
     for user_id in users:
@@ -262,15 +297,17 @@ async def broadcast_command(client, message: Message):
                 message_id=message.reply_to_message.id,
                 protect_content=True
             )
-            asyncio.create_task(delete_after(msg, timer))
+            if not await is_admin(user_id):
+                asyncio.create_task(delete_after(msg, broadcast_timer))
             count += 1
             await asyncio.sleep(0.05) # Rate limiting
         except FloodWait as e:
             await asyncio.sleep(e.value)
         except Exception:
             pass
-    await status_msg.edit_text(to_small_caps(f"ʙʀᴏᴀᴅᴄᴀsᴛ ᴄᴏᴍᴘʟᴇᴛᴇᴅ ᴛᴏ {count} ᴜsᴇʀs. ᴍᴇssᴀɢᴇs ᴡɪʟʟ ᴅᴇʟᴇᴛᴇ ɪɴ {timer} sᴇᴄᴏɴᴅs."))
-    asyncio.create_task(delete_after([message, status_msg], timer))
+
+    await status_msg.edit_text(to_small_caps(f"ʙʀᴏᴀᴅᴄᴀsᴛ ᴄᴏᴍᴘʟᴇᴛᴇᴅ ᴛᴏ {count} ᴜsᴇʀs. ᴍᴇssᴀɢᴇs ᴡɪʟʟ ᴅᴇʟᴇᴛᴇ ɪɴ {broadcast_timer} sᴇᴄᴏɴᴅs."))
+    asyncio.create_task(safe_delete([message, status_msg], default_timer))
 
 async def channel_command(client, message: Message):
     if not await is_authorized(message.from_user.id):
@@ -310,7 +347,7 @@ async def channel_command(client, message: Message):
         await remove_random_link(random_id)
 
     asyncio.create_task(rotate_link())
-    asyncio.create_task(delete_after([message, msg], timer))
+    asyncio.create_task(safe_delete([message, msg], timer))
 
 async def add_auth_command(client, message: Message):
     if not await is_admin(message.from_user.id):
@@ -319,7 +356,7 @@ async def add_auth_command(client, message: Message):
     text = message.text.split()
     if len(text) < 2:
         msg = await message.reply(to_small_caps("ᴜsᴀɢᴇ: /ᴀᴅᴅ_ᴀᴜᴛʜ [ᴜsᴇʀ_ɪᴅ]"))
-        asyncio.create_task(delete_after([message, msg], timer))
+        asyncio.create_task(safe_delete([message, msg], timer))
         return
     try:
         user_id = int(text[1])
@@ -330,7 +367,7 @@ async def add_auth_command(client, message: Message):
         msg = await message.reply(to_small_caps(f"ᴜsᴇʀ {user_id} ᴀᴜᴛʜᴏʀɪᴢᴇᴅ."))
     except ValueError:
         msg = await message.reply(to_small_caps("ɪɴᴠᴀʟɪᴅ ᴜsᴇʀ ɪᴅ."))
-    asyncio.create_task(delete_after([message, msg], timer))
+    asyncio.create_task(safe_delete([message, msg], timer))
 
 async def stats_command(client, message: Message):
     if not await is_admin(message.from_user.id):
@@ -347,7 +384,7 @@ async def stats_command(client, message: Message):
         f"ᴛᴏᴛᴀʟ ᴘᴏsᴛs: {total_posts}"
     )
     msg = await message.reply(stats_text)
-    asyncio.create_task(delete_after([message, msg], timer))
+    asyncio.create_task(safe_delete([message, msg], timer))
 
 async def add_admin_command(client, message: Message):
     if not await is_admin(message.from_user.id):
@@ -356,7 +393,7 @@ async def add_admin_command(client, message: Message):
     text = message.text.split()
     if len(text) < 2:
         msg = await message.reply(to_small_caps("ᴜsᴀɢᴇ: /ᴀᴅᴅᴀᴅᴍɪɴ [ᴜsᴇʀ_ɪᴅ]"))
-        asyncio.create_task(delete_after([message, msg], timer))
+        asyncio.create_task(safe_delete([message, msg], timer))
         return
     try:
         user_id = int(text[1])
@@ -364,7 +401,7 @@ async def add_admin_command(client, message: Message):
         msg = await message.reply(to_small_caps(f"ᴜsᴇʀ {user_id} ᴀᴅᴅᴇᴅ ᴀs ᴀᴅᴍɪɴ."))
     except ValueError:
         msg = await message.reply(to_small_caps("ɪɴᴠᴀʟɪᴅ ᴜsᴇʀ ɪᴅ."))
-    asyncio.create_task(delete_after([message, msg], timer))
+    asyncio.create_task(safe_delete([message, msg], timer))
 
 async def remove_admin_command(client, message: Message):
     if not await is_admin(message.from_user.id):
@@ -373,7 +410,7 @@ async def remove_admin_command(client, message: Message):
     text = message.text.split()
     if len(text) < 2:
         msg = await message.reply(to_small_caps("ᴜsᴀɢᴇ: /ʀᴇᴍᴏᴠᴇᴀᴅᴍɪɴ [ᴜsᴇʀ_ɪᴅ]"))
-        asyncio.create_task(delete_after([message, msg], timer))
+        asyncio.create_task(safe_delete([message, msg], timer))
         return
     try:
         user_id = int(text[1])
@@ -381,7 +418,7 @@ async def remove_admin_command(client, message: Message):
         msg = await message.reply(to_small_caps(f"ᴜsᴇʀ {user_id} ʀᴇᴍᴏᴠᴇᴅ ꜰʀᴏᴍ ᴀᴅᴍɪɴs."))
     except ValueError:
         msg = await message.reply(to_small_caps("ɪɴᴠᴀʟɪᴅ ᴜsᴇʀ ɪᴅ."))
-    asyncio.create_task(delete_after([message, msg], timer))
+    asyncio.create_task(safe_delete([message, msg], timer))
 
 async def set_timer_command(client, message: Message):
     if not await is_admin(message.from_user.id):
@@ -390,7 +427,7 @@ async def set_timer_command(client, message: Message):
     text = message.text.split()
     if len(text) < 2:
         msg = await message.reply(to_small_caps("ᴜsᴀɢᴇ: /sᴇᴛᴛɪᴍᴇʀ [sᴇᴄᴏɴᴅs]"))
-        asyncio.create_task(delete_after([message, msg], timer))
+        asyncio.create_task(safe_delete([message, msg], timer))
         return
     try:
         seconds = int(text[1])
@@ -398,7 +435,7 @@ async def set_timer_command(client, message: Message):
         msg = await message.reply(to_small_caps(f"ᴅᴇʟᴇᴛᴇ ᴛɪᴍᴇʀ sᴇᴛ ᴛᴏ {seconds} sᴇᴄᴏɴᴅs."))
     except ValueError:
         msg = await message.reply(to_small_caps("ɪɴᴠᴀʟɪᴅ sᴇᴄᴏɴᴅs."))
-    asyncio.create_task(delete_after([message, msg], timer))
+    asyncio.create_task(safe_delete([message, msg], timer))
 
 async def setfs_command(client, message: Message):
     if not await is_admin(message.from_user.id):
@@ -415,7 +452,7 @@ async def setfs_command(client, message: Message):
 
     timer = await get_delete_timer()
     msg = await message.reply(text, reply_markup=InlineKeyboardMarkup(buttons))
-    asyncio.create_task(delete_after([message, msg], timer))
+    asyncio.create_task(safe_delete([message, msg], timer))
 
 from pyrogram.handlers import MessageHandler, CallbackQueryHandler
 
