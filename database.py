@@ -42,8 +42,7 @@ async def is_admin(user_id):
     return user_id in db["admins"]
 
 async def is_authorized(user_id):
-    db = await load_db()
-    return user_id in db["admins"] or user_id in db["authorized_users"]
+    return await is_admin(user_id)
 
 async def add_post(post_id, chat_id, message_id):
     db = await load_db()

@@ -13,8 +13,8 @@ async def start_handler(client, message: Message):
     user_id = message.from_user.id
     text = message.text.split()
 
-    await add_user(user_id) # Add user to DB for broadcast
     if len(text) > 1:
+        await add_user(user_id) # Add user to DB for broadcast
         data = text[1]
         post_data = await get_post(data)
         if post_data:
@@ -41,6 +41,7 @@ async def start_handler(client, message: Message):
     if not await is_authorized(user_id):
         return
 
+    await add_user(user_id) # Add admin to DB for broadcast
     welcome_text = to_small_caps("ᴡᴇʟᴄᴏᴍᴇ ᴛᴏ ᴛʜᴇ ʟɪɴᴋ sʜᴀʀᴇ ʙᴏᴛ.\n\nᴜsᴇ ᴛʜᴇ ʙᴜᴛᴛᴏɴs ʙᴇʟᴏᴡ ᴛᴏ ᴍᴀɴᴀɢᴇ.")
     buttons = [
         [InlineKeyboardButton(to_small_caps("ᴄʀᴇᴀᴛᴇ ᴘᴏsᴛ"), callback_data="create_post")],
