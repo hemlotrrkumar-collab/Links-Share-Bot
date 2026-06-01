@@ -28,6 +28,7 @@ Set the following environment variables on your server:
 - `API_ID`: Your Telegram API ID.
 - `API_HASH`: Your Telegram API Hash.
 - `BOT_TOKEN`: Your primary Bot Token.
+- `ADMINS`: Comma-separated list of Admin User IDs (e.g., `6241315571,12345678`).
 
 ### 4. Run the Bot
 ```bash
