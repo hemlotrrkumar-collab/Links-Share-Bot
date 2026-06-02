@@ -36,8 +36,7 @@ async def safe_delete(messages, seconds):
     for msg in messages:
         if not msg: continue
         try:
-            user_id = msg.chat.id
-            if not await is_admin(user_id):
+            if msg.outgoing:
                 to_delete.append(msg)
         except Exception:
             pass
@@ -75,15 +74,6 @@ async def start_handler(client, message: Message):
 
     await add_user(user_id) # Add user to DB for broadcast
 
-    if not await is_admin(user_id):
-        try:
-            message_ids = []
-            async for m in client.get_chat_history(message.chat.id):
-                message_ids.append(m.id)
-            if message_ids:
-                await client.delete_messages(message.chat.id, message_ids)
-        except Exception:
-            pass
 
     if len(text) > 1:
         data = text[1]
@@ -160,13 +150,13 @@ async def callback_handler(client, callback_query: CallbackQuery):
     timer = await get_delete_timer()
     if data == "create_post":
         msg = await callback_query.message.reply(to_small_caps("ᴜsᴇ /ᴘᴏsᴛ ᴛᴏ ᴄʀᴇᴀᴛᴇ ᴀ sʜᴀʀᴇᴀʙʟᴇ ʟɪɴᴋ."))
-        asyncio.create_task(safe_delete(msg, timer))
+        asyncio.create_task(safe_delete([msg], timer))
     elif data == "broadcast_ui":
-        msg = await callback_query.message.reply(to_small_caps("ʀᴇᴘʟʏ ᴛᴏ ᴀ ᴍᴇssᴀɢᴇ ᴡɪᴛʜ /ʙʀᴏᴀᴅᴄᴀsᴛ ᴛᴏ sᴇɴᴅ ɪᴛ."))
-        asyncio.create_task(safe_delete(msg, timer))
+        msg = await callback_query.message.reply(to_small_caps("ʀᴇᴘʟʏ ᴛᴏ ᴀ ᴍᴇssᴀɢᴇ ᴡɪᴛʜ /ʙʀᴏᴀᴅᴄᴀsᴛ [sᴇᴄᴏɴᴅs] ᴛᴏ sᴇɴᴅ ɪᴛ."))
+        asyncio.create_task(safe_delete([msg], timer))
     elif data == "clone_ui":
         msg = await callback_query.message.reply(to_small_caps("ᴜsᴇ /ᴄʟᴏɴᴇ [ʙᴏᴛ_ᴛᴏᴋᴇɴ] ᴛᴏ ᴄʟᴏɴᴇ."))
-        asyncio.create_task(safe_delete(msg, timer))
+        asyncio.create_task(safe_delete([msg], timer))
     elif data == "fs_list":
         channels = await get_force_channels()
         text = to_small_caps("ꜰᴏʀᴄᴇ sᴜʙ ᴄʜᴀɴɴᴇʟs:\n\n")
@@ -179,11 +169,11 @@ async def callback_handler(client, callback_query: CallbackQuery):
             buttons.append([InlineKeyboardButton(to_small_caps("ᴀᴅᴅ ᴄʜᴀɴɴᴇʟ"), callback_data="fs_add")])
 
         msg = await callback_query.message.edit_text(text, reply_markup=InlineKeyboardMarkup(buttons))
-        asyncio.create_task(safe_delete(msg, timer))
+        asyncio.create_task(safe_delete([msg], timer))
     elif data == "fs_add":
         fs_setup_state[user_id] = {"step": "chat_id", "data": {}}
         msg = await callback_query.message.edit_text(to_small_caps("sᴇɴᴅ ᴛʜᴇ ᴄʜᴀᴛ ɪᴅ ᴏʀ ᴜsᴇʀɴᴀᴍᴇ ᴏꜰ ᴛʜᴇ ᴄʜᴀɴɴᴇʟ:"))
-        asyncio.create_task(safe_delete(msg, timer))
+        asyncio.create_task(safe_delete([msg], timer))
     elif data.startswith("fs_del_"):
         index = int(data.split("_")[2])
         channels = await get_force_channels()
@@ -200,7 +190,7 @@ async def callback_handler(client, callback_query: CallbackQuery):
             fs_setup_state[user_id]["data"]["type"] = f_type
             fs_setup_state[user_id]["step"] = "link"
             msg = await callback_query.message.edit_text(to_small_caps("sᴇɴᴅ ᴛʜᴇ ɪɴᴠɪᴛᴇ ʟɪɴᴋ ꜰᴏʀ ᴛʜᴇ ᴄʜᴀɴɴᴇʟ:"))
-            asyncio.create_task(safe_delete(msg, timer))
+            asyncio.create_task(safe_delete([msg], timer))
     await callback_query.answer()
 
 async def post_command(client, message: Message):
@@ -238,7 +228,7 @@ async def handle_messages(client, message: Message):
             return
 
     if not await is_authorized(user_id):
-        asyncio.create_task(safe_delete(message, timer))
+        asyncio.create_task(safe_delete([message], timer))
         return
     post_id = str(uuid.uuid4())[:8]
     await add_post(post_id, message.chat.id, message.id)
@@ -287,7 +277,9 @@ async def broadcast_command(client, message: Message):
 
     db = await load_db()
     users = db.get("users", [])
-    count = 0
+    total_users = len(users)
+    success_count = 0
+    failed_count = 0
     status_msg = await message.reply(to_small_caps("ʙʀᴏᴀᴅᴄᴀsᴛ sᴛᴀʀᴛᴇᴅ..."))
     for user_id in users:
         try:
@@ -297,17 +289,41 @@ async def broadcast_command(client, message: Message):
                 message_id=message.reply_to_message.id,
                 protect_content=True
             )
-            if not await is_admin(user_id):
-                asyncio.create_task(delete_after(msg, broadcast_timer))
-            count += 1
-            await asyncio.sleep(0.05) # Rate limiting
+            asyncio.create_task(delete_after(msg, broadcast_timer))
+            success_count += 1
         except FloodWait as e:
             await asyncio.sleep(e.value)
+            # Retry once after FloodWait
+            try:
+                msg = await client.copy_message(
+                    chat_id=user_id,
+                    from_chat_id=message.chat.id,
+                    message_id=message.reply_to_message.id,
+                    protect_content=True
+                )
+                asyncio.create_task(delete_after(msg, broadcast_timer))
+                success_count += 1
+            except Exception:
+                failed_count += 1
         except Exception:
-            pass
+            failed_count += 1
 
-    await status_msg.edit_text(to_small_caps(f"ʙʀᴏᴀᴅᴄᴀsᴛ ᴄᴏᴍᴘʟᴇᴛᴇᴅ ᴛᴏ {count} ᴜsᴇʀs. ᴍᴇssᴀɢᴇs ᴡɪʟʟ ᴅᴇʟᴇᴛᴇ ɪɴ {broadcast_timer} sᴇᴄᴏɴᴅs."))
-    asyncio.create_task(safe_delete([message, status_msg], default_timer))
+        if (success_count + failed_count) % 10 == 0:
+            try:
+                await status_msg.edit_text(to_small_caps(f"ʙʀᴏᴀᴅᴄᴀsᴛɪɴɢ... {success_count + failed_count}/{total_users}"))
+            except Exception:
+                pass
+        await asyncio.sleep(0.05) # Rate limiting
+
+    report = (
+        f"--- ʙʀᴏᴀᴅᴄᴀsᴛ ʀᴇᴘᴏʀᴛ ---\n\n"
+        f"ᴛᴏᴛᴀʟ ᴜsᴇʀs: {total_users}\n"
+        f"sᴜᴄᴄᴇssꜰᴜʟ: {success_count}\n"
+        f"ꜰᴀɪʟᴇᴅ: {failed_count}\n\n"
+        f"ᴍᴇssᴀɢᴇs ᴡɪʟʟ ᴅᴇʟᴇᴛᴇ ɪɴ {broadcast_timer} sᴇᴄᴏɴᴅs."
+    )
+    await status_msg.edit_text(to_small_caps(report))
+    asyncio.create_task(safe_delete([status_msg], default_timer))
 
 async def channel_command(client, message: Message):
     if not await is_authorized(message.from_user.id):
